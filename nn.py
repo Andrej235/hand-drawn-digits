@@ -18,8 +18,9 @@ class NeuralNetwork:
         return weights, biases
 
     def sigmoid(self, x):
-        return 1 / (1 + np.exp(-x))
-
+        with np.errstate(over='ignore', divide='ignore'):
+            return 1 / (1 + np.exp(-x))
+    
     def sigmoid_prime(self, x):
         return self.sigmoid(x) * (1 - self.sigmoid(x))
     
@@ -87,4 +88,49 @@ class NeuralNetwork:
 
             avg_cost = total_cost / num_samples
             print(f"Epoch {epoch+1}/{epochs} - Average Cost: {avg_cost:.4f}")
+        
+    def save_model(self, filename):
+        save_dict = {
+            "layer_sizes": np.array(self.layer_sizes),
+        }
+        
+        for i, (w, b) in enumerate(zip(self.weights, self.biases)):
+            save_dict[f"weights_{i}"] = w
+            save_dict[f"biases_{i}"] = b
+        
+        np.savez_compressed(filename, **save_dict)
+        
+    @staticmethod
+    def load_model(filename):
+        data = np.load(filename, allow_pickle=True)
+        layer_sizes = data["layer_sizes"].tolist()
+        network = NeuralNetwork(layer_sizes)
+        
+        network.weights = []
+        network.biases = []
+        num_layers = len(layer_sizes) - 1
+        
+        for i in range(num_layers):
+            network.weights.append(data[f"weights_{i}"].astype(np.float32))
+            network.biases.append(data[f"biases_{i}"].astype(np.float32))
+        
+        return network
+    
+    def test(self):
+        inputs = self.load_mnist('./mnist/t10k-images.idx3-ubyte').reshape(10000, 784).astype(np.float32) / 255.0
+        expected_outputs = np.eye(10)[self.load_mnist('./mnist/t10k-labels.idx1-ubyte')]
 
+        total_samples = inputs.shape[0]
+        correct_count = 0
+        
+        for i in range(total_samples):
+            x = inputs[i]
+            y_expected = expected_outputs[i]
+
+            output = self.forward(x)
+            y_prediction = np.argmax(output)
+
+            if y_prediction == np.argmax(y_expected):
+                correct_count += 1
+                
+        print(f"Accuracy: {correct_count / total_samples * 100:.2f}% ({correct_count}/{total_samples})")
