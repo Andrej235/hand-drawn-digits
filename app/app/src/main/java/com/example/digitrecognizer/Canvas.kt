@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -30,13 +31,15 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun Canvas() {
-    // Change this value to adjust the canvas resolution
+    // Canvas configuration - change these values to adjust the app behavior
     val canvasSizePixels = 32
+    val maxBrushSize = 7  // Maximum brush diameter in pixels
 
     var pixels by remember {
         mutableStateOf(FloatArray(canvasSizePixels * canvasSizePixels) { 1f })
     }
     var currentPaintValue by remember { mutableFloatStateOf(0f) }
+    var brushSize by remember { mutableIntStateOf(1) }  // Brush diameter in pixels
     var boxSize by remember { mutableStateOf(Size.Zero) }
 
     Column(
@@ -44,37 +47,51 @@ fun Canvas() {
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Box(modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(1f)
-            .background(Color.LightGray)
-            .onSizeChanged { size ->
-                boxSize = Size(size.width.toFloat(), size.height.toFloat())
-            }
-            .pointerInput(boxSize) {
-                if (boxSize.width == 0f || boxSize.height == 0f) return@pointerInput
+        // Drawing canvas
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .background(Color.LightGray)
+                .onSizeChanged { size ->
+                    boxSize = Size(size.width.toFloat(), size.height.toFloat())
+                }
+                .pointerInput(boxSize, brushSize) {
+                    if (boxSize.width == 0f || boxSize.height == 0f) return@pointerInput
 
-                val pixelWidth = boxSize.width / canvasSizePixels
-                val pixelHeight = boxSize.height / canvasSizePixels
+                    val pixelWidth = boxSize.width / canvasSizePixels
+                    val pixelHeight = boxSize.height / canvasSizePixels
 
-                detectDragGestures(onDragStart = { offset ->
-                    handleDragEvent(
-                        offset, pixelWidth, pixelHeight, canvasSizePixels, currentPaintValue
-                    ) { x, y ->
-                        pixels = updatePixel(pixels, x, y, canvasSizePixels, currentPaintValue)
-                    }
-                }, onDrag = { change, _ ->
-                    handleDragEvent(
-                        change.position,
-                        pixelWidth,
-                        pixelHeight,
-                        canvasSizePixels,
-                        currentPaintValue
-                    ) { x, y ->
-                        pixels = updatePixel(pixels, x, y, canvasSizePixels, currentPaintValue)
-                    }
-                })
-            }) {
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            handleDragEvent(
+                                offset = offset,
+                                pixelWidth = pixelWidth,
+                                pixelHeight = pixelHeight,
+                                canvasSize = canvasSizePixels,
+                                brushSize = brushSize,
+                                paintValue = currentPaintValue
+                            ) { x, y ->
+                                pixels =
+                                    updatePixel(pixels, x, y, canvasSizePixels, currentPaintValue)
+                            }
+                        },
+                        onDrag = { change, _ ->
+                            handleDragEvent(
+                                offset = change.position,
+                                pixelWidth = pixelWidth,
+                                pixelHeight = pixelHeight,
+                                canvasSize = canvasSizePixels,
+                                brushSize = brushSize,
+                                paintValue = currentPaintValue
+                            ) { x, y ->
+                                pixels =
+                                    updatePixel(pixels, x, y, canvasSizePixels, currentPaintValue)
+                            }
+                        }
+                    )
+                }
+        ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val pixelWidth = size.width / canvasSizePixels
                 val pixelHeight = size.height / canvasSizePixels
@@ -94,7 +111,8 @@ fun Canvas() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text("Current brush value: ${"%.2f".format(currentPaintValue)}")
+        // Controls
+        Text("Brush value: ${"%.2f".format(currentPaintValue)}")
         Slider(
             value = currentPaintValue,
             onValueChange = { currentPaintValue = it },
@@ -102,10 +120,20 @@ fun Canvas() {
             modifier = Modifier.fillMaxWidth()
         )
 
+        Text("Brush size: $brushSize")
+        Slider(
+            value = brushSize.toFloat(),
+            onValueChange = { brushSize = it.toInt() },
+            valueRange = 1f..maxBrushSize.toFloat(),
+            steps = maxBrushSize - 1,
+            modifier = Modifier.fillMaxWidth()
+        )
+
         Button(
             onClick = {
                 pixels = FloatArray(canvasSizePixels * canvasSizePixels) { 1f }
-            }, modifier = Modifier.fillMaxWidth()
+            },
+            modifier = Modifier.fillMaxWidth()
         ) {
             Text("Clear Canvas")
         }
@@ -117,16 +145,29 @@ private fun handleDragEvent(
     pixelWidth: Float,
     pixelHeight: Float,
     canvasSize: Int,
+    brushSize: Int,
     paintValue: Float,
     updatePixels: (x: Int, y: Int) -> Unit
 ) {
-    val x = (offset.x / pixelWidth).toInt().coerceIn(0, canvasSize - 1)
-    val y = (offset.y / pixelHeight).toInt().coerceIn(0, canvasSize - 1)
-    updatePixels(x, y)
+    val centerX = (offset.x / pixelWidth).toInt().coerceIn(0, canvasSize - 1)
+    val centerY = (offset.y / pixelHeight).toInt().coerceIn(0, canvasSize - 1)
+
+    val radius = (brushSize - 1) / 2
+    for (xOffset in -radius..radius) {
+        for (yOffset in -radius..radius) {
+            val x = (centerX + xOffset).coerceIn(0, canvasSize - 1)
+            val y = (centerY + yOffset).coerceIn(0, canvasSize - 1)
+            updatePixels(x, y)
+        }
+    }
 }
 
 private fun updatePixel(
-    currentPixels: FloatArray, x: Int, y: Int, canvasSize: Int, value: Float
+    currentPixels: FloatArray,
+    x: Int,
+    y: Int,
+    canvasSize: Int,
+    value: Float
 ): FloatArray {
     val newPixels = currentPixels.copyOf()
     val index = y * canvasSize + x
