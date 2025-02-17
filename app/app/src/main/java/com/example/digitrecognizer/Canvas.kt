@@ -1,5 +1,6 @@
 package com.example.digitrecognizer
 
+import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -27,12 +28,13 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 @Composable
 fun Canvas() {
     // Canvas configuration - change these values to adjust the app behavior
-    val canvasSizePixels = 32
+    val canvasSizePixels = 28
     val maxBrushSize = 7  // Maximum brush diameter in pixels
 
     var pixels by remember {
@@ -48,50 +50,43 @@ fun Canvas() {
             .padding(16.dp)
     ) {
         // Drawing canvas
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .background(Color.LightGray)
-                .onSizeChanged { size ->
-                    boxSize = Size(size.width.toFloat(), size.height.toFloat())
-                }
-                .pointerInput(boxSize, brushSize) {
-                    if (boxSize.width == 0f || boxSize.height == 0f) return@pointerInput
+        Box(modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+            .background(Color.LightGray)
+            .onSizeChanged { size ->
+                boxSize = Size(size.width.toFloat(), size.height.toFloat())
+            }
+            .pointerInput(boxSize, brushSize) {
+                if (boxSize.width == 0f || boxSize.height == 0f) return@pointerInput
 
-                    val pixelWidth = boxSize.width / canvasSizePixels
-                    val pixelHeight = boxSize.height / canvasSizePixels
+                val pixelWidth = boxSize.width / canvasSizePixels
+                val pixelHeight = boxSize.height / canvasSizePixels
 
-                    detectDragGestures(
-                        onDragStart = { offset ->
-                            handleDragEvent(
-                                offset = offset,
-                                pixelWidth = pixelWidth,
-                                pixelHeight = pixelHeight,
-                                canvasSize = canvasSizePixels,
-                                brushSize = brushSize,
-                                paintValue = currentPaintValue
-                            ) { x, y ->
-                                pixels =
-                                    updatePixel(pixels, x, y, canvasSizePixels, currentPaintValue)
-                            }
-                        },
-                        onDrag = { change, _ ->
-                            handleDragEvent(
-                                offset = change.position,
-                                pixelWidth = pixelWidth,
-                                pixelHeight = pixelHeight,
-                                canvasSize = canvasSizePixels,
-                                brushSize = brushSize,
-                                paintValue = currentPaintValue
-                            ) { x, y ->
-                                pixels =
-                                    updatePixel(pixels, x, y, canvasSizePixels, currentPaintValue)
-                            }
-                        }
-                    )
-                }
-        ) {
+                detectDragGestures(onDragStart = { offset ->
+                    handleDragEvent(
+                        offset = offset,
+                        pixelWidth = pixelWidth,
+                        pixelHeight = pixelHeight,
+                        canvasSize = canvasSizePixels,
+                        brushSize = brushSize,
+                        paintValue = currentPaintValue
+                    ) { x, y ->
+                        pixels = updatePixel(pixels, x, y, canvasSizePixels, currentPaintValue)
+                    }
+                }, onDrag = { change, _ ->
+                    handleDragEvent(
+                        offset = change.position,
+                        pixelWidth = pixelWidth,
+                        pixelHeight = pixelHeight,
+                        canvasSize = canvasSizePixels,
+                        brushSize = brushSize,
+                        paintValue = currentPaintValue
+                    ) { x, y ->
+                        pixels = updatePixel(pixels, x, y, canvasSizePixels, currentPaintValue)
+                    }
+                })
+            }) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val pixelWidth = size.width / canvasSizePixels
                 val pixelHeight = size.height / canvasSizePixels
@@ -132,10 +127,23 @@ fun Canvas() {
         Button(
             onClick = {
                 pixels = FloatArray(canvasSizePixels * canvasSizePixels) { 1f }
-            },
-            modifier = Modifier.fillMaxWidth()
+            }, modifier = Modifier.fillMaxWidth()
         ) {
             Text("Clear Canvas")
+        }
+
+        val context = LocalContext.current
+        Button(
+            onClick = {
+                val guess = recognizeDigit(pixels)
+                Toast.makeText(
+                    context,
+                    "Digit: $guess",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }, modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Guess")
         }
     }
 }
@@ -163,14 +171,16 @@ private fun handleDragEvent(
 }
 
 private fun updatePixel(
-    currentPixels: FloatArray,
-    x: Int,
-    y: Int,
-    canvasSize: Int,
-    value: Float
+    currentPixels: FloatArray, x: Int, y: Int, canvasSize: Int, value: Float
 ): FloatArray {
     val newPixels = currentPixels.copyOf()
     val index = y * canvasSize + x
     newPixels[index] = value
     return newPixels
+}
+
+private fun recognizeDigit(pixels: FloatArray): Int {
+    val invertedPixels = pixels.map { 1 - it }
+
+    return 0
 }
