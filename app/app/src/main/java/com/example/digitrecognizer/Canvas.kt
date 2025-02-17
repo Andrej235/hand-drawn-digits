@@ -138,9 +138,7 @@ fun Canvas() {
             onClick = {
                 val guess = recognizeDigit(context, pixels)
                 Toast.makeText(
-                    context,
-                    "Digit: $guess",
-                    Toast.LENGTH_SHORT
+                    context, "Digit: $guess", Toast.LENGTH_SHORT
                 ).show()
             }, modifier = Modifier.fillMaxWidth()
         ) {
@@ -181,9 +179,65 @@ private fun updatePixel(
 }
 
 private fun recognizeDigit(context: Context, pixels: FloatArray): Int {
-    val invertedPixels = pixels.map { 1 - it }
+    val invertedPixels = pixels.map { 1 - it }.toFloatArray()
 
     val model = readNpz(context, "model.npz")
+    val layers = transformLayers(model)
 
-    return 0
+    return feedForward(invertedPixels, layers.weights, layers.biases, 0)
+}
+
+data class TransformedLayers(
+    val layerSizes: FloatArray, val biases: Array<FloatArray>, val weights: Array<Array<FloatArray>>
+)
+
+fun transformLayers(map: Map<String, Array<FloatArray>>): TransformedLayers {
+    val layerSizesArray =
+        map["layer_sizes"] ?: throw IllegalArgumentException("Missing 'layer_sizes' in the map")
+    val layerSizes = layerSizesArray.firstOrNull()
+        ?: throw IllegalArgumentException("'layer_sizes' array is empty")
+    val numLayers = layerSizes.size - 1
+
+    val biases = Array(numLayers) { i ->
+        map["biases_$i"]?.firstOrNull()
+            ?: throw IllegalArgumentException("Missing 'biases_$i' in the map")
+    }
+
+    val weights = Array(numLayers) { i ->
+        map["weights_$i"] ?: throw IllegalArgumentException("Missing 'weights_$i' in the map")
+    }
+
+    return TransformedLayers(layerSizes, biases, weights)
+}
+
+fun feedForward(
+    input: FloatArray, weights: Array<Array<FloatArray>>, biases: Array<FloatArray>, l: Int
+): Int {
+    if (l >= weights.size) {
+        var maxValueIndex = 0
+        var maxValue = input[0]
+        for (i in 1 until input.size) {
+            if (input[i] > maxValue) {
+                maxValue = input[i]
+                maxValueIndex = i
+            }
+        }
+
+        return maxValueIndex;
+    }
+
+    val z = FloatArray(weights[l].size)
+    for (i in weights[l].indices) {
+        z[i] = biases[l][i]
+        for (j in input.indices) {
+            z[i] += weights[l][i][j] * input[j]
+        }
+    }
+
+    val activation = FloatArray(z.size)
+    for (i in z.indices) {
+        activation[i] = 1 / (1 + kotlin.math.exp(-z[i])) // Sigmoid activation function
+    }
+
+    return feedForward(activation, weights, biases, l + 1)
 }

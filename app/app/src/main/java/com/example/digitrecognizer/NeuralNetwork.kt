@@ -1,6 +1,7 @@
 package com.example.digitrecognizer
 
 import android.content.Context
+import java.io.EOFException
 import java.io.IOException
 import java.io.InputStream
 import java.nio.ByteBuffer
@@ -42,7 +43,6 @@ fun parseNpy(stream: InputStream): Array<FloatArray> {
         "Invalid NPY magic number"
     }
 
-    // Read version (2 bytes)
     val versionMajor = stream.read()
     val versionMinor = stream.read()
 
@@ -86,21 +86,29 @@ fun parseNpy(stream: InputStream): Array<FloatArray> {
         else -> throw IOException("Unsupported dtype: $descr")
     }
 
-    // Read data
+    // Read data with guaranteed full buffer population
     val buffer = ByteArray(rows * cols * elementSize)
-    stream.read(buffer)
+    var totalRead = 0
+    while (totalRead < buffer.size) {
+        val bytesRead = stream.read(buffer, totalRead, buffer.size - totalRead)
+        if (bytesRead == -1) throw EOFException("Unexpected end of stream")
+        totalRead += bytesRead
+    }
+
     val byteBuffer = ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN)
     val typedBuffer = bufferHandler(byteBuffer)
 
-    // Convert to FloatArray (adjust if using different type)
+    // Create array with proper row-major ordering
     return Array(rows) { row ->
         FloatArray(cols) { col ->
-            when (descr) {
-                "<i8" -> (typedBuffer as LongBuffer).get(row * cols + col).toFloat()
-                "<f4" -> (typedBuffer as FloatBuffer).get(row * cols + col)
-                "<f8" -> (typedBuffer as DoubleBuffer).get(row * cols + col).toFloat()
+            // Calculate position based on actual buffer layout
+            val pos = when (descr) {
+                "<i8" -> (typedBuffer as LongBuffer)[row * cols + col].toFloat()
+                "<f4" -> (typedBuffer as FloatBuffer)[row * cols + col]
+                "<f8" -> (typedBuffer as DoubleBuffer)[row * cols + col].toFloat()
                 else -> throw IllegalStateException()
             }
+            pos
         }
     }
 }
@@ -117,4 +125,3 @@ fun InputStream.readIntLittleEndian(): Int {
     read(bytes)
     return (bytes[0].toInt() and 0xFF) or (bytes[1].toInt() and 0xFF shl 8) or (bytes[2].toInt() and 0xFF shl 16) or (bytes[3].toInt() and 0xFF shl 24)
 }
-
