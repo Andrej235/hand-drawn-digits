@@ -1,5 +1,6 @@
 package com.example.digitrecognizer
 
+import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -135,7 +136,7 @@ fun Canvas() {
         val context = LocalContext.current
         Button(
             onClick = {
-                val guess = recognizeDigit(pixels)
+                val guess = recognizeDigit(context, pixels)
                 Toast.makeText(
                     context,
                     "Digit: $guess",
@@ -179,8 +180,10 @@ private fun updatePixel(
     return newPixels
 }
 
-private fun recognizeDigit(pixels: FloatArray): Int {
+private fun recognizeDigit(context: Context, pixels: FloatArray): Int {
     val invertedPixels = pixels.map { 1 - it }
+
+    val model = readNpz(context, "model.npz")
 
     return 0
 }
